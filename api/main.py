@@ -1,6 +1,8 @@
 import os
 import json
+import requests
 import tensorflow as tf
+from azure.storage.blob import BlobServiceClient
 from tensorflow.keras.preprocessing.text import tokenizer_from_json
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from fastapi import FastAPI, HTTPException
@@ -9,6 +11,57 @@ from pydantic import BaseModel
 from opencensus.ext.azure.log_exporter import AzureLogHandler
 import logging
 import uvicorn
+
+# === Configuration Azure Blob Storage ===
+AZURE_STORAGE_ACCOUNT_NAME = "stockagebadbuzzapi"
+AZURE_STORAGE_ACCOUNT_KEY = "cefTtXePUQr655aYq8/Quz6iYeR/U20y0ehaOQoXmIxc6It80fGCFtgT0/xDPO01M09+3/IJsVvV+AStVohYzA=="
+CONTAINER_NAME = "models"
+
+# Dossier local des modèles
+MODEL_DIR = "models"
+os.makedirs(MODEL_DIR, exist_ok=True)
+
+# Fonction pour télécharger un fichier depuis Azure Blob Storage
+def download_model_from_azure(blob_name):
+    """Télécharge un modèle depuis Azure Blob Storage si non présent en local."""
+    local_file_path = os.path.join(MODEL_DIR, blob_name)
+
+    if not os.path.exists(local_file_path):
+        print(f"Téléchargement de {blob_name} depuis Azure...")
+        try:
+            blob_service_client = BlobServiceClient(
+                account_url=f"https://{AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net",
+                credential=AZURE_STORAGE_ACCOUNT_KEY
+            )
+            blob_client = blob_service_client.get_blob_client(CONTAINER_NAME, blob_name)
+
+            with open(local_file_path, "wb") as f:
+                f.write(blob_client.download_blob().readall())
+
+            print(f"{blob_name} téléchargé avec succès !")
+        except Exception as e:
+            print(f" Erreur lors du téléchargement de {blob_name} : {e}")
+            return None
+
+    return local_file_path
+
+#  Liste des modèles à récupérer
+model_files = [
+    "best_model_fasttext.keras",
+    "best_model_glove.keras",
+    "best_model_w2v.keras",
+    "best_model_bert.keras",
+    "distilbert_model/tf_model.h5",
+    "tokenizer_fasttext.json",
+    "tokenizer_glove.json",
+    "tokenizer_w2v.json"
+]
+
+#  Téléchargement des modèles au démarrage
+for model in model_files:
+    download_model_from_azure(model)
+
+print("Tous les modèles sont prêts à être utilisés !")
 
 # === Configuration des logs et Azure Application Insights ===
 instrumentation_key = os.getenv("APPINSIGHTS_INSTRUMENTATIONKEY", "ad29b7fd-4184-4a49-a1f4-97371d2cb7ae")
@@ -25,7 +78,6 @@ else:
     logger.warning("Attention : Azure Insights ne reçoit pas les logs")
 
 # === Chargement du modèle ===
-MODEL_DIR = os.getenv("MODEL_DIR", "models")  # Flexibilité pour test local/distant
 model_path = os.path.join(MODEL_DIR, "best_model_fasttext.keras")
 
 if not os.path.exists(model_path):
@@ -39,7 +91,7 @@ except Exception as e:
     raise ValueError(f"Erreur de chargement du modèle : {e}")
 
 # === Chargement du tokenizer JSON ===
-tokenizer_path = os.path.join(MODEL_DIR, "tokenizer_fasttext.json")  # Adapter selon le modèle utilisé
+tokenizer_path = os.path.join(MODEL_DIR, "tokenizer_fasttext.json")  
 
 if not os.path.exists(tokenizer_path):
     raise FileNotFoundError(f"Tokenizer non trouvé : {tokenizer_path}")
@@ -131,7 +183,6 @@ async def feedback(input: FeedbackInput):
 async def test_log():
     logger.info("Ceci est un test de log manuel envoyé à Application Insights.")
     return {"message": "Log envoyé avec succès à Azure !" }
-
 
 # === Exécution locale ===
 if __name__ == "__main__":
