@@ -1,0 +1,21 @@
+# Ignorer les fichiers de modèle et de tracking MLFlow
+data/*.vec
+data/*.txt
+data/sentiment140/*.csv
+notebooks/mlruns/
+notebooks/artifacts/
+*.whl
+*.keras
+*.h5
+
+# Ignorer les checkpoints de Jupyter Notebook
+notebooks/.ipynb_checkpoints/
+
+# Ignorer les modèles trop lourds
+api/models/*.keras
+api/models/*.h5
+api/models/distilbert_model/
+api/models/bert_tokenizer/
+api/models/
+
+*.png
